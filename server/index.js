@@ -5,16 +5,12 @@ const client = require("prom-client");
 const app = express();
 const port = process.env.PORT || 8080;
 
-const server = app.listen(port, () => {
-  console.log(`🚀 WebSocket server running on port ${port}`);
-});
-
-const wss = new WebSocket.Server({ server });
-
 // ---- Prometheus metrics ----
 const register = new client.Registry();
+
 client.collectDefaultMetrics({ register });
 
+// Custom WebSocket metrics
 const activeConnections = new client.Gauge({
   name: "websocket_active_connections",
   help: "Number of active WebSocket connections",
@@ -28,17 +24,27 @@ const messagesSent = new client.Counter({
   help: "Total number of messages sent",
 });
 
+// Register custom metrics
 register.registerMetric(activeConnections);
 register.registerMetric(messagesReceived);
 register.registerMetric(messagesSent);
 
-// Expose /metrics endpoint
 app.get("/metrics", async (req, res) => {
-  res.set("Content-Type", register.contentType);
-  res.end(await register.metrics());
+  try {
+    res.set("Content-Type", register.contentType);
+    res.end(await register.metrics());
+  } catch (ex) {
+    res.status(500).end(ex);
+  }
 });
 
 // ---- WebSocket handling ----
+const server = app.listen(port, () => {
+  console.log(`🚀 WebSocket server running on port ${port}`);
+});
+
+const wss = new WebSocket.Server({ server });
+
 let clients = new Set();
 
 wss.on("connection", (ws) => {
